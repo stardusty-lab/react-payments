@@ -11890,6 +11890,10 @@ function useViewTransitionState(to, { relative } = {}) {
 	return matchPath(path.pathname, nextPath) != null || matchPath(path.pathname, currentPath) != null;
 }
 //#endregion
+//#region src/configs/env.ts
+var import_client = require_client();
+var ENV = { BASE_URL: "/react-payments/" };
+//#endregion
 //#region node_modules/react/cjs/react-jsx-runtime.production.js
 /**
 * @license React
@@ -11923,17 +11927,13 @@ var require_react_jsx_runtime_production = /* @__PURE__ */ __commonJSMin(((expor
 	exports.jsxs = jsxProd;
 }));
 //#endregion
-//#region node_modules/react/jsx-runtime.js
-var require_jsx_runtime = /* @__PURE__ */ __commonJSMin(((exports, module) => {
-	module.exports = require_react_jsx_runtime_production();
-}));
-//#endregion
 //#region src/providers/AppProviders.tsx
-var import_client = require_client();
-var import_jsx_runtime = require_jsx_runtime();
+var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = require_react_jsx_runtime_production();
+})))();
 var AppProviders = ({ children }) => {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrowserRouter, {
-		basename: "/react-payments",
+		basename: ENV.BASE_URL,
 		children
 	});
 };
