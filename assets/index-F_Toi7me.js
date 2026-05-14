@@ -11932,7 +11932,10 @@ var require_jsx_runtime = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 var import_client = require_client();
 var import_jsx_runtime = require_jsx_runtime();
 var AppProviders = ({ children }) => {
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrowserRouter, { children });
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrowserRouter, {
+		basename: "payments/register",
+		children
+	});
 };
 //#endregion
 //#region src/core/hooks/useFormValues.ts
