@@ -12037,8 +12037,11 @@ var validators = {
 };
 var validateFormValueRules = (value, rules) => {
 	return rules.map((rule) => {
+		if (rule.type === "custom") return {
+			...rule,
+			valid: rule.validate(value)
+		};
 		const validator = validators[rule.type];
-		if (!validator) return { valid: true };
 		return {
 			...rule,
 			valid: validator(value, rule[rule.type])
@@ -12094,7 +12097,7 @@ var BRAND_NUMBER = {
 		]
 	},
 	amex: {
-		startNumber: ["34", "35"],
+		startNumber: ["34", "37"],
 		length: 15,
 		lengths: [
 			4,
@@ -12158,9 +12161,10 @@ var CARD_OPTIONS = [
 //#endregion
 //#region src/pages/payments/register/form/utils.ts
 var getBrandCard = (cardNumbers) => {
+	const cardNumbersString = cardNumbers.join("");
 	const brandCard = Object.entries(BRAND_NUMBER).find(([key, brand]) => {
 		const { startNumber } = brand;
-		if (startNumber.some((brandNumber) => cardNumbers[0].startsWith(brandNumber))) return true;
+		if (startNumber.some((brandNumber) => cardNumbersString.startsWith(brandNumber))) return true;
 	});
 	return brandCard ? brandCard?.[0] : "default";
 };
@@ -12336,9 +12340,9 @@ var useCardNumbers = () => {
 		false
 	]);
 	const renderErrorMessage = () => {
-		if (invalidAttemp.find(Boolean)) return "유효현 카드번호(숫자)를 입력해주세요";
+		if (invalidAttemp.find(Boolean)) return "invalidAttemp";
 		if (Object.values(blur).every((blur) => !blur)) return "";
-		if (Object.values(blur).some((cardNumber) => cardNumber.length !== 4)) return "카드 번호를 전부 채워주세요";
+		if (Object.values(blur).some((cardNumber) => cardNumber.length !== 4)) return "incomplete";
 		return "";
 	};
 	const renderErrorCardNumberInput = (index) => {
@@ -12405,7 +12409,7 @@ var useCard = () => {
 	};
 	const [invalidAttemp, setInvalidAttemp] = (0, import_react.useState)({ card: false });
 	const renderErrorMessage = () => {
-		if (invalidAttemp.card) return "유효한 비밀번호를 입력해주세요";
+		if (invalidAttemp.card) return "invalidAttemp";
 		if (!blur.card) return "";
 		const errorCard = errors.card.filter((error) => !error.valid);
 		if (errorCard[0]) return errorCard[0].message;
@@ -12465,7 +12469,7 @@ var useExpirationDate = () => {
 		year: false
 	});
 	const renderErrorMessage = () => {
-		if (Object.values(invalidAttemp).find(Boolean)) return "유효햔 유효기간(숫자)을 입력해주세요";
+		if (Object.values(invalidAttemp).find(Boolean)) return "invalidAttemp";
 		if (Object.values(blur).every((blur) => !blur)) return "";
 		const errorMonth = errors.month.filter((error) => !error.valid);
 		if (errorMonth[0]) return errorMonth[0].message;
@@ -12527,7 +12531,7 @@ var useCvc = () => {
 	};
 	const [invalidAttemp, setInvalidAttemp] = (0, import_react.useState)({ cvc: false });
 	const renderErrorMessage = () => {
-		if (invalidAttemp.cvc) return "유효한 CVC(숫자)를 입력해주세요";
+		if (invalidAttemp.cvc) return "invalidAttemp";
 		if (!blur.cvc) return "";
 		const errorCvc = errors.cvc.filter((error) => !error.valid);
 		if (errorCvc[0]) return errorCvc[0].message;
@@ -12571,7 +12575,7 @@ var usePassword = () => {
 	};
 	const [invalidAttemp, setInvalidAttemp] = (0, import_react.useState)({ password: false });
 	const renderErrorMessage = () => {
-		if (invalidAttemp.password) return "유효한 비밀번호를 입력해주세요";
+		if (invalidAttemp.password) return "invalidAttemp";
 		if (!blur.password) return "";
 		const errorPassword = errors.password.filter((error) => !error.valid);
 		if (errorPassword[0]) return errorPassword[0].message;
@@ -12971,6 +12975,18 @@ var Button = ({ as = "button", children, variant = "default", edge = "rounded", 
 		children
 	});
 };
+//#endregion
+//#region src/pages/payments/register/form/errorMessage.ts
+var errorMessages = {
+	cardNumbers: {
+		invalidAttemp: "유효현 카드번호(숫자)를 입력해주세요",
+		incomplete: "카드 번호를 전부 채워주세요"
+	},
+	card: { invalidAttemp: "유효한 카드사를 선택해주세요" },
+	cvc: { invalidAttemp: "유효한 CVC(숫자)를 입력해주세요" },
+	expirationDate: { invalidAttemp: "유효햔 유효기간(숫자)을 입력해주세요" },
+	password: { invalidAttemp: "유효한 비밀번호를 입력해주세요" }
+};
 var Form_module_default = { payments: "_payments_1us6g_1" };
 //#endregion
 //#region src/pages/payments/register/form/Form.tsx
@@ -12980,26 +12996,42 @@ var Form = () => {
 	const { cardNumbers, card, expirationDate, cvc, password, brandCard, handleSubmit } = outletContext;
 	const prevFormValidsRefs = (0, import_react.useRef)({});
 	(0, import_react.useEffect)(() => {
-		if (cardNumbers.isValid && !card.isValid && card.refs.current?.card) {
-			if (prevFormValidsRefs.current.card) return;
-			prevFormValidsRefs.current.card = true;
-			return card.refs.current?.card.focus();
+		function focusCardIfCardNumberCompleted() {
+			if (cardNumbers.isValid && !card.isValid && card.refs.current?.card) {
+				if (prevFormValidsRefs.current.card) return true;
+				prevFormValidsRefs.current.card = true;
+				card.refs.current?.card.focus();
+				return true;
+			}
 		}
-		if (card.isValid && !expirationDate.valids.month) {
-			if (prevFormValidsRefs.current.month) return;
-			prevFormValidsRefs.current.month = true;
-			return expirationDate.refs.current.month?.focus();
+		function focusMonthIfCardSelected() {
+			if (card.isValid && !expirationDate.valids.month) {
+				if (prevFormValidsRefs.current.month) return true;
+				prevFormValidsRefs.current.month = true;
+				expirationDate.refs.current.month?.focus();
+				return true;
+			}
 		}
-		if (expirationDate.valids.year && !cvc.isValid) {
-			if (prevFormValidsRefs.current.cvc) return;
-			prevFormValidsRefs.current.cvc = true;
-			return cvc.refs.current?.cvc?.focus();
+		function focusCvcIfExpirationDateCompleted() {
+			if (expirationDate.valids.year && !cvc.isValid) {
+				if (prevFormValidsRefs.current.cvc) return true;
+				prevFormValidsRefs.current.cvc = true;
+				cvc.refs.current?.cvc?.focus();
+				return true;
+			}
 		}
-		if (cvc.isValid && !password.isValid) {
-			if (prevFormValidsRefs.current.password) return;
-			prevFormValidsRefs.current.password = true;
-			return password.refs.current?.password?.focus();
+		function focusPasswordIfCvcCompleted() {
+			if (cvc.isValid && !password.isValid) {
+				if (prevFormValidsRefs.current.password) return true;
+				prevFormValidsRefs.current.password = true;
+				password.refs.current?.password?.focus();
+				return true;
+			}
 		}
+		if (focusMonthIfCardSelected()) return;
+		if (focusCvcIfExpirationDateCompleted()) return;
+		if (focusPasswordIfCvcCompleted()) return;
+		if (focusCardIfCardNumberCompleted()) return;
 	}, [
 		cardNumbers.isValid,
 		card.refs,
@@ -13011,12 +13043,12 @@ var Form = () => {
 		password.refs,
 		password.isValid
 	]);
-	const [step, setStep] = (0, import_react.useState)(0);
+	const [releavedStep, setReleavedStep] = (0, import_react.useState)(0);
 	(0, import_react.useEffect)(() => {
-		if (cardNumbers.isValid) setStep(1);
-		if (card.isValid) setStep(2);
-		if (expirationDate.isValid) setStep(3);
-		if (cvc.isValid) setStep(4);
+		if (cardNumbers.isValid) setReleavedStep(1);
+		if (card.isValid) setReleavedStep(2);
+		if (expirationDate.isValid) setReleavedStep(3);
+		if (cvc.isValid) setReleavedStep(4);
 	}, [
 		cardNumbers.isValid,
 		card.isValid,
@@ -13039,10 +13071,10 @@ var Form = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormGroup, {
 				title: "비밀번호를 입력해 주세요",
 				subTitle: "앞의 2자리를 입력해주세요",
-				hide: !(step >= 4),
+				hide: !(releavedStep >= 4),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
 					label: "비밀번호 앞 2자리",
-					errorMessage: password.renderErrorMessage(),
+					errorMessage: errorMessages.password?.[password.renderErrorMessage()] || password.renderErrorMessage() || "",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 						ref: password.ref,
 						type: "password",
@@ -13057,10 +13089,10 @@ var Form = () => {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormGroup, {
 				title: "CVC 번호를 입력해 주세요",
-				hide: !(step >= 3),
+				hide: !(releavedStep >= 3),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
 					label: "CVC",
-					errorMessage: cvc.renderErrorMessage(),
+					errorMessage: errorMessages?.cvc?.[cvc.renderErrorMessage()] || cvc.renderErrorMessage() || "",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 						ref: cvc.ref,
 						type: "tel",
@@ -13077,10 +13109,10 @@ var Form = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormGroup, {
 				title: "카드 유효기간을 입력해 주세요",
 				subTitle: "월/년도(MMYY)를 순서대로 입력해 주세요",
-				hide: !(step >= 2),
+				hide: !(releavedStep >= 2),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, {
 					label: "유효기간",
-					errorMessage: expirationDate.renderErrorMessage(),
+					errorMessage: errorMessages?.expirationDate?.[expirationDate.renderErrorMessage()] || expirationDate.renderErrorMessage() || "",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 						ref: expirationDate.ref,
 						type: "tel",
@@ -13107,9 +13139,9 @@ var Form = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormGroup, {
 				title: "카드사를 선택해 주세요",
 				subTitle: "현재 국내 카드사만 가능합니다.",
-				hide: !(step >= 1),
+				hide: !(releavedStep >= 1),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
-					errorMessage: card.renderErrorMessage(),
+					errorMessage: errorMessages?.card?.[card.renderErrorMessage()] || card.renderErrorMessage() || "",
 					children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Select, {
 						ref: card.ref,
 						id: "card",
@@ -13123,10 +13155,10 @@ var Form = () => {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FormGroup, {
 				title: "결제할 카드 번호를 입력해 주세요",
 				subTitle: "본인 명의의 카드만 결제 가능합니다.",
-				hide: !(step >= 0),
+				hide: !(releavedStep >= 0),
 				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, {
 					label: "카드 번호",
-					errorMessage: cardNumbers.renderErrorMessage(),
+					errorMessage: errorMessages?.cardNumbers?.[cardNumbers.renderErrorMessage()] || cardNumbers.renderErrorMessage() || "",
 					style: { justifyContent: "flex-start" },
 					children: Object.values(cardNumbers.values).map((value, index, array) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 						ref: cardNumbers.ref,
