@@ -34079,6 +34079,6 @@ function App() {
 }
 //#endregion
 //#region src/main.tsx
-await worker.start();
+await worker.start({ serviceWorker: { url: `${ENV.BASE_URL}mockServiceWorker.js` } });
 (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_react.StrictMode, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AppProviders, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(App, {}) }) }));
 //#endregion
