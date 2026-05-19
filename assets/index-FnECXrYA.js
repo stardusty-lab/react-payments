@@ -32191,7 +32191,10 @@ function useViewTransitionState(to, { relative } = {}) {
 }
 //#endregion
 //#region src/configs/env.ts
-var ENV = { BASE_URL: "/react-payments/" };
+var ENV = {
+	BASE_URL: "/react-payments/",
+	API_URL: void 0
+};
 //#endregion
 //#region node_modules/react/cjs/react-jsx-runtime.production.js
 /**
@@ -32838,6 +32841,32 @@ var useRegisterCardForm = () => {
 	};
 };
 //#endregion
+//#region src/services/core/http/error.ts
+var RequestAjaxError = class extends Error {
+	status;
+	data;
+	headers;
+	config;
+	constructor(error) {
+		super("RequestAjaxError");
+		this.data = error.data;
+		this.status = error.status;
+		this.headers = error.headers;
+		this.config = error.config;
+	}
+};
+var RequestNetworkError = class extends Error {
+	data;
+	headers;
+	config;
+	constructor(error) {
+		super("RequestNetworkError");
+		this.data = error.data;
+		this.headers = error.headers;
+		this.config = error.config;
+	}
+};
+//#endregion
 //#region src/services/core/useExecute/useExecute.ts
 var useExecute = ({ executeFn, onSuccess, onError }) => {
 	const [status, setStatus] = (0, import_react.useState)({
@@ -32866,7 +32895,7 @@ var useExecute = ({ executeFn, onSuccess, onError }) => {
 				setStatus({
 					status: "error",
 					data: null,
-					error
+					error: error instanceof RequestAjaxError ? error?.data : error
 				});
 				onError?.(error);
 			}
@@ -32878,27 +32907,73 @@ var useExecute = ({ executeFn, onSuccess, onError }) => {
 	};
 };
 //#endregion
-//#region src/services/apis/cards/cards.ts
+//#region src/services/core/http/requestAjax.ts
+var requestAjax = async (url, config) => {
+	const { method = "get", url: configUrl, params, query, data, headers } = config || {};
+	let finalUrl = `${ENV.API_URL || ""}${configUrl || url}`;
+	if (params) {
+		const paramsstring = Object.values(params).join("/");
+		finalUrl += `/${paramsstring}`;
+	}
+	if (query) {
+		const querystring = new URLSearchParams(query).toString();
+		finalUrl += `?${querystring}`;
+	}
+	const customHeaders = {
+		"Content-Type": "application/json",
+		...headers
+	};
+	let res;
+	try {
+		res = await fetch(finalUrl, {
+			method,
+			...!!Object.values(customHeaders).filter(Boolean).length && { headers: { ...customHeaders } },
+			...data && { body: data instanceof FormData ? data : JSON.stringify(data) }
+		});
+	} catch (error) {
+		throw new RequestNetworkError({
+			data: error,
+			headers: customHeaders,
+			config
+		});
+	}
+	let responseData;
+	try {
+		responseData = await res.json();
+	} catch (e) {
+		console.error(e);
+		responseData = await res.text();
+	}
+	const response = {
+		data: responseData,
+		status: res.status,
+		headers: customHeaders,
+		config
+	};
+	if (res.ok) return response;
+	else throw new RequestAjaxError(response);
+};
+//#endregion
+//#region src/services/apis/cards/fetcher.ts
 var getCards = async () => {
-	return await fetch("/cards").then((res) => res.json());
+	return (await requestAjax("/cards")).data;
 };
 var postCards = async ({ number, expirationDate, cvc, issuerCode }) => {
-	const response = await fetch("/cards", {
+	return (await requestAjax("/cards", {
 		method: "post",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({
+		data: {
 			number,
 			expirationDate,
 			cvc,
 			issuerCode
-		})
-	});
-	const data = await response.json();
-	if (response.ok) return data;
-	throw data;
+		}
+	})).data;
 };
 var deleteCards = async ({ id }) => {
-	return await fetch(`/cards/${id}`, { method: "delete" });
+	return await requestAjax(`/cards`, {
+		method: "delete",
+		params: { id }
+	});
 };
 //#endregion
 //#region src/pages/payments/cards/list/constants.ts
@@ -32975,6 +33050,17 @@ var mapCardModelToRequestDTO = (card) => {
 	};
 };
 //#endregion
+//#region src/services/apis/cards/repository.ts
+var repository_default = {
+	getCards: async () => {
+		return mapCardsResponseDTOToModel(await getCards());
+	},
+	postCards: async (data) => {
+		return await postCards(mapCardModelToRequestDTO(data));
+	},
+	deleteCards
+};
+//#endregion
 //#region src/pages/payments/register/flow/constants.ts
 var ERROR_CODE = {
 	INVALID_CARD_NUMBER: "INVALID_CARD_NUMBER",
@@ -32992,12 +33078,12 @@ var useRegisterCardAction = ({ values: { cardNumbers, card, cvc, expirationDate 
 	const navigate = useNavigate();
 	const { status: { error }, mutate } = useExecute({
 		executeFn: async () => {
-			await postCards(mapCardModelToRequestDTO({
+			return await repository_default.postCards({
 				cardNumbers: cardNumbers.values,
 				card: card.values.card,
 				cvc: cvc.values.cvc,
 				expirationDate: expirationDate.values
-			}));
+			});
 		},
 		onSuccess: () => {
 			navigate(ROUTES.PAYMENTS.CARDS);
@@ -33928,14 +34014,14 @@ var useLoadData = ({ queryFn }) => {
 //#region src/pages/payments/cards/list/hooks/useLoadCards.ts
 var useLoadCards = () => {
 	return useLoadData({ queryFn: async () => {
-		return mapCardsResponseDTOToModel(await getCards());
+		return await repository_default.getCards();
 	} });
 };
 //#endregion
 //#region src/pages/payments/cards/list/hooks/useDeleteCard.ts
 var useDeleteCards = ({ onSuccess }) => {
 	return useExecute({
-		executeFn: deleteCards,
+		executeFn: repository_default.deleteCards,
 		onSuccess
 	});
 };
@@ -33946,6 +34032,7 @@ var useCards = () => {
 	const { mutate } = useDeleteCards({ onSuccess: refetch });
 	return {
 		status,
+		loadCard: refetch,
 		deleteCard: mutate
 	};
 };
@@ -33964,7 +34051,10 @@ var formatCardNumberForMasking = (maskedNumber, mask = "*") => {
 	return `${visibleHead}${mask.repeat(maskLength)}${visibleTail}`.replace(/(.{4})/g, "$1 ").trim();
 };
 var Cards = () => {
-	const { status: { status, data: cards }, deleteCard } = useCards();
+	const { status: { status, data: cards }, loadCard, deleteCard } = useCards();
+	const handleRetryClick = () => {
+		loadCard();
+	};
 	const handleDeleteClick = async (id) => {
 		if (!window.confirm("정말 삭제하시겠습니까?")) return;
 		deleteCard({ id });
@@ -33987,6 +34077,7 @@ var Cards = () => {
 		action: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 			variant: "primary",
 			block: true,
+			onClick: handleRetryClick,
 			children: "다시 시도"
 		}),
 		children: "카드 목록을 불러올 수 없어요"
