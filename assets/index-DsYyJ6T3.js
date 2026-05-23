@@ -32984,7 +32984,7 @@ var postCards = async ({ number, expirationDate, cvc, issuerCode }) => {
 var deleteCards = async ({ id }) => {
 	return await requestAjax(`/cards`, {
 		method: "delete",
-		params: { id }
+		pathParams: { id }
 	});
 };
 //#endregion
