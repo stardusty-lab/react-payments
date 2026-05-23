@@ -30234,6 +30234,14 @@ var validateExpirationDate$1 = (value) => {
 	const monthNumber = Number(month);
 	return monthNumber >= 1 && monthNumber <= 12;
 };
+function formatMaskCardNumber(cardNumber) {
+	const cleaned = cardNumber.replace(/\D/g, "");
+	if (cleaned.length < 14 || cleaned.length > 16) throw new Error("올바른 카드 번호 형식이 아닙니다. (14~16자리의 숫자가 필요합니다.)");
+	const front = cleaned.slice(0, 6);
+	const back = cleaned.slice(-4);
+	const maskLength = cleaned.length - 10;
+	return `${front}${"*".repeat(maskLength)}${back}`;
+}
 var cards = [];
 var handlers$1 = [
 	http.post("/cards", async ({ request }) => {
@@ -30259,7 +30267,12 @@ var handlers$1 = [
 		return HttpResponse.json({ id: crypto.randomUUID() }, { status: 201 });
 	}),
 	http.get("/cards", () => {
-		return HttpResponse.json(cards, { status: 201 });
+		return HttpResponse.json(cards.map((card) => {
+			return {
+				...card,
+				number: formatMaskCardNumber(card.number)
+			};
+		}), { status: 200 });
 	}),
 	http.delete("/cards/:id", ({ params }) => {
 		const { id } = params;
@@ -32909,10 +32922,10 @@ var useExecute = ({ executeFn, onSuccess, onError }) => {
 //#endregion
 //#region src/services/core/http/requestAjax.ts
 var requestAjax = async (url, config) => {
-	const { method = "get", url: configUrl, params, query, data, headers } = config || {};
+	const { method = "get", url: configUrl, pathParams, query, data, headers } = config || {};
 	let finalUrl = `${ENV.API_URL || ""}${configUrl || url}`;
-	if (params) {
-		const paramsstring = Object.values(params).join("/");
+	if (pathParams) {
+		const paramsstring = Object.values(pathParams).join("/");
 		finalUrl += `/${paramsstring}`;
 	}
 	if (query) {
@@ -32937,12 +32950,11 @@ var requestAjax = async (url, config) => {
 			config
 		});
 	}
-	let responseData;
+	let responseData = await res.text();
 	try {
-		responseData = await res.json();
+		responseData = JSON.parse(responseData);
 	} catch (e) {
 		console.error(e);
-		responseData = await res.text();
 	}
 	const response = {
 		data: responseData,
@@ -33078,12 +33090,13 @@ var useRegisterCardAction = ({ values: { cardNumbers, card, cvc, expirationDate 
 	const navigate = useNavigate();
 	const { status: { error }, mutate } = useExecute({
 		executeFn: async () => {
-			return await repository_default.postCards({
+			const data = {
 				cardNumbers: cardNumbers.values,
 				card: card.values.card,
 				cvc: cvc.values.cvc,
 				expirationDate: expirationDate.values
-			});
+			};
+			return await repository_default.postCards(data);
 		},
 		onSuccess: () => {
 			navigate(ROUTES.PAYMENTS.CARDS);
@@ -34003,8 +34016,8 @@ var useLoadData = ({ queryFn }) => {
 		return fetchData();
 	}, [fetchData]);
 	(0, import_react.useEffect)(() => {
-		fetchData();
-	}, []);
+		refetch();
+	}, [refetch]);
 	return {
 		status,
 		refetch
@@ -34013,9 +34026,7 @@ var useLoadData = ({ queryFn }) => {
 //#endregion
 //#region src/pages/payments/cards/list/hooks/useLoadCards.ts
 var useLoadCards = () => {
-	return useLoadData({ queryFn: async () => {
-		return await repository_default.getCards();
-	} });
+	return useLoadData({ queryFn: repository_default.getCards });
 };
 //#endregion
 //#region src/pages/payments/cards/list/hooks/useDeleteCard.ts
